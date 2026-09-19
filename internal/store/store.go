@@ -18,6 +18,15 @@ import (
 // EnvDir overrides the profiles directory.
 const EnvDir = "PROFILES_DIR"
 
+// Predefined profiles, created in new terminals if they don't exist.
+const (
+	// Default is loaded in new terminals when the config sets no autoload.
+	Default = "default"
+	// Shared is loaded before the other profiles on every load, unless
+	// --no-shared is given.
+	Shared = "shared"
+)
+
 var validName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
 // ErrNotFound is returned for a profile that doesn't exist.

@@ -14,6 +14,8 @@ import (
 	"unicode"
 
 	"github.com/pelletier/go-toml/v2"
+
+	"github.com/ryanparsa/profiles/internal/store"
 )
 
 // FileName is the config file inside the profiles directory.
@@ -24,7 +26,9 @@ const Default = `# profiles configuration. Every key can also be set with an env
 # e.g. PROFILES_QUIET=true or PROFILES_AUTOLOAD="default work".
 
 # Profiles loaded in every new terminal (needs the init line in your rc file).
-autoload = []
+# Unset loads the "default" profile; [] loads none. The "shared" profile is
+# loaded either way (see "profiles install --help" to turn that off).
+# autoload = ["default"]
 
 # Editor for "profiles new/edit/config". Empty uses $VISUAL, then $EDITOR.
 editor = ""
@@ -48,7 +52,8 @@ type Config struct {
 func Path(dir string) string { return filepath.Join(dir, FileName) }
 
 // Load reads the config from dir, then applies PROFILES_* env overrides.
-// A missing file yields the defaults.
+// A missing file yields the defaults. Autoload is the "default" profile
+// unless the file or env sets it, even to an empty list.
 func Load(dir string) (*Config, error) {
 	c := &Config{ConfirmDelete: true}
 	b, err := os.ReadFile(Path(dir))
@@ -60,6 +65,9 @@ func Load(dir string) (*Config, error) {
 	}
 	if err := c.applyEnv(); err != nil {
 		return nil, err
+	}
+	if c.Autoload == nil { // "autoload = []" unmarshals to an empty, non-nil slice
+		c.Autoload = []string{store.Default}
 	}
 	c.Autoload = splitNames(c.Autoload)
 	return c, nil

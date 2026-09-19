@@ -25,8 +25,8 @@ type Shell interface {
 	// Ext is the profile file extension for this shell.
 	Ext() string
 	// Init returns the rc-file hook: the wrapper function, then completion,
-	// then the autoload call.
-	Init(completion string, autoload bool) string
+	// then "profiles <autoload>" unless autoload is empty.
+	Init(completion, autoload string) string
 	// Load returns code that snapshots the shell, sources file, and records
 	// what changed under name. quiet suppresses the "loaded" message.
 	Load(name, file string, quiet bool) string

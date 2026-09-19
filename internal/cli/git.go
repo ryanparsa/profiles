@@ -73,6 +73,9 @@ func link(a *app, url string) error {
 	if err != nil {
 		return err
 	}
+	// Predefined profiles made on first use don't count as local profiles;
+	// the checkout replaces them if the remote has its own.
+	profiles = slices.DeleteFunc(profiles, a.untouched)
 	hasCommits := r.HasCommits()
 	switch {
 	case !hasCommits && len(profiles) == 0: // new machine: take the remote

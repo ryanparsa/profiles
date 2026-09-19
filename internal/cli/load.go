@@ -16,14 +16,25 @@ import (
 	"github.com/ryanparsa/profiles/internal/store"
 )
 
+const noSharedUsage = `don't also load the "shared" profile`
+
 func loadCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:               "load <name>...",
-		Short:             `Load profiles into this terminal (same as "profiles <name>")`,
+	var noShared bool
+	cmd := &cobra.Command{
+		Use:   "load <name>...",
+		Short: `Load profiles into this terminal (same as "profiles <name>")`,
+		Long: `Load profiles into this terminal.
+
+The "shared" profile, if it exists and isn't loaded yet, is loaded first so
+the named profiles can override it. Use --no-shared to skip it.`,
 		Args:              cobra.MinimumNArgs(1),
 		ValidArgsFunction: completeProfiles(false),
-		RunE:              withApp(func(a *app, cmd *cobra.Command, args []string) error { return a.load(args, false) }),
+		RunE: withApp(func(a *app, cmd *cobra.Command, args []string) error {
+			return a.load(args, false, !noShared)
+		}),
 	}
+	cmd.Flags().BoolVar(&noShared, "no-shared", false, noSharedUsage)
+	return cmd
 }
 
 func unloadCmd() *cobra.Command {
@@ -53,7 +64,7 @@ func reloadCmd() *cobra.Command {
 					return errors.New("no profiles loaded")
 				}
 			}
-			return a.load(args, false)
+			return a.load(args, false, false)
 		}),
 	}
 }
@@ -61,12 +72,16 @@ func reloadCmd() *cobra.Command {
 // load emits code to load each profile. A profile that is already
 // loaded is unloaded first, so loading it again is a reload. Repeated names
 // load once: a second load would record the first one's changes as the
-// starting point and never undo them.
-func (a *app) load(names []string, quiet bool) error {
+// starting point and never undo them. With shared, the shared profile goes
+// first if it exists and isn't loaded yet.
+func (a *app) load(names []string, quiet, shared bool) error {
 	names = unique(names)
 	s, err := a.state()
 	if err != nil {
 		return err
+	}
+	if shared && !slices.Contains(names, store.Shared) && !s.Loaded(store.Shared) && a.st.Exists(store.Shared) {
+		names = append([]string{store.Shared}, names...)
 	}
 	// Resolve everything first so a typo doesn't half-load.
 	profiles := make([]store.Profile, len(names))
@@ -207,9 +222,10 @@ func recordCmd() *cobra.Command {
 }
 
 func autoloadCmd() *cobra.Command {
-	return &cobra.Command{
+	var noShared bool
+	cmd := &cobra.Command{
 		Use:    "__autoload",
-		Short:  "Load the profiles listed in config autoload",
+		Short:  "Load the profiles listed in config autoload, plus shared",
 		Hidden: true,
 		Args:   cobra.NoArgs,
 		RunE: withApp(func(a *app, cmd *cobra.Command, args []string) error {
@@ -221,18 +237,18 @@ func autoloadCmd() *cobra.Command {
 			for _, n := range a.cfg.Autoload {
 				switch {
 				case s.Loaded(n):
+				case n == store.Default && !a.st.Exists(n): // deleted on purpose
 				case !a.st.Exists(n):
 					warn("autoload: no profile named %q in %s", n, a.st.Dir)
 				default:
 					names = append(names, n)
 				}
 			}
-			if len(names) == 0 {
-				return nil
-			}
-			return a.load(names, true)
+			return a.load(names, true, !noShared)
 		}),
 	}
+	cmd.Flags().BoolVar(&noShared, "no-shared", false, noSharedUsage)
+	return cmd
 }
 
 // unique returns names without repeats, keeping the first occurrence.

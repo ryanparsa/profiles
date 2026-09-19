@@ -22,7 +22,7 @@ func (pwsh) Ext() string  { return ".ps1" }
 // exe resolves the profile binary, skipping the wrapper function.
 const pwshExe = `$__pexe = (Get-Command -Name profiles -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source`
 
-func (pwsh) Init(completion string, autoload bool) string {
+func (pwsh) Init(completion, autoload string) string {
 	var b strings.Builder
 	b.WriteString(`# profiles shell integration (pwsh)
 function global:profiles {
@@ -40,8 +40,8 @@ function global:profiles {
 	if completion != "" {
 		b.WriteString(strings.TrimRight(completion, "\r\n") + "\n")
 	}
-	if autoload {
-		b.WriteString("profiles __autoload\n")
+	if autoload != "" {
+		b.WriteString("profiles " + autoload + "\n")
 	}
 	return b.String()
 }

@@ -104,6 +104,7 @@ profiles unload       # undo everything
 profiles                  # list profiles (same as profiles list)
 profiles work             # load a profile
 profiles work aws-prod    # load several; they stack
+profiles work --no-shared # load without the "shared" profile
 profiles unload aws-prod  # unload one…
 profiles unload           # …or all of them
 profiles reload           # re-source loaded profiles after editing them
@@ -174,12 +175,27 @@ Rules of thumb:
   and `profiles diff` show only the first 7 characters of long values (so you
   can tell keys apart, e.g. `sk-ant-****`) and hide short values entirely.
 
+## Predefined profiles
+
+The first run (when `~/.profiles/config.toml` doesn't exist yet) creates the
+config file and two profiles. After that, they're regular files: deleting one
+doesn't bring it back.
+
+- **`default`** is loaded in new terminals when `config.toml` doesn't set
+  `autoload`. Set `autoload` to other profiles to load those instead, or to
+  `[]` to load nothing. Otherwise it's a regular profile: `profiles default`.
+- **`shared`** is for settings you want everywhere. It's loaded first
+  whenever profiles are loaded, both in new terminals and with
+  `profiles <name>`, so the other profiles can override it. Leave it out with
+  `--no-shared` (`profiles work --no-shared`), or in new terminals with
+  `eval "$(profiles install zsh --no-shared)"`.
+
 ## Configuration
 
 `profiles config` opens `~/.profiles/config.toml`:
 
 ```toml
-autoload = ["default"]   # profiles loaded in every new terminal
+autoload = ["default"]   # profiles loaded in every new terminal (unset: "default")
 editor = "code -w"       # default: $VISUAL, then $EDITOR, then vi / notepad
 confirm_delete = true    # ask before `profiles rm`
 quiet = false            # hide the ✓ messages

@@ -20,7 +20,7 @@ func (p posix) Name() string {
 
 func (posix) Ext() string { return ".sh" }
 
-func (p posix) Init(completion string, autoload bool) string {
+func (p posix) Init(completion, autoload string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, `# profiles shell integration (%[1]s)
 profiles() {
@@ -41,8 +41,8 @@ profiles() {
 		}
 		fmt.Fprintf(&b, "if %s; then\n%s\nfi\n", guard, strings.TrimRight(completion, "\n"))
 	}
-	if autoload {
-		b.WriteString("profiles __autoload\n")
+	if autoload != "" {
+		b.WriteString("profiles " + autoload + "\n")
 	}
 	return b.String()
 }

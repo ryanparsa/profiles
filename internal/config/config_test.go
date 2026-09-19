@@ -88,7 +88,7 @@ func TestDefaultFileParses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (Config{ConfirmDelete: true}); !reflect.DeepEqual(*c, want) {
+	if want := (Config{Autoload: []string{"default"}, ConfirmDelete: true}); !reflect.DeepEqual(*c, want) {
 		t.Errorf("default file = %+v, want %+v", *c, want)
 	}
 }
@@ -98,7 +98,22 @@ func TestLoadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(c.Autoload) != 0 || c.Quiet || !c.ConfirmDelete || c.Editor != "" {
+	if !slices.Equal(c.Autoload, []string{"default"}) || c.Quiet || !c.ConfirmDelete || c.Editor != "" {
 		t.Errorf("defaults = %+v", c)
+	}
+}
+
+// An explicitly empty autoload turns off the "default" profile.
+func TestEmptyAutoload(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(Path(dir), []byte("autoload = []\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Autoload) != 0 {
+		t.Errorf("Autoload = %q, want none", c.Autoload)
 	}
 }

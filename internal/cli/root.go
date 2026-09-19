@@ -4,6 +4,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"runtime"
@@ -50,6 +51,7 @@ type exitError int
 func (e exitError) Error() string { return fmt.Sprintf("exit status %d", int(e)) }
 
 func newRoot() *cobra.Command {
+	var noShared bool
 	root := &cobra.Command{
 		Use:   "profiles [name...]",
 		Short: "Load and unload env profiles in the current terminal",
@@ -73,10 +75,11 @@ a shortcut for "profiles load <name>".`,
 			if len(args) == 0 {
 				return a.list()
 			}
-			return a.load(args, false)
+			return a.load(args, false, !noShared)
 		}),
 	}
 	root.CompletionOptions.DisableDefaultCmd = true
+	root.Flags().BoolVar(&noShared, "no-shared", false, noSharedUsage)
 	root.PersistentFlags().StringVar(&shellFlag, "shell", "", "shell to generate code for (zsh, bash, pwsh); detected by default")
 
 	root.AddCommand(
@@ -116,11 +119,57 @@ func newApp() (*app, error) {
 	if err != nil {
 		return nil, err
 	}
+	_, err = os.Stat(config.Path(st.Dir))
+	firstRun := errors.Is(err, fs.ErrNotExist)
 	cfg, err := config.Load(st.Dir)
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", config.Path(st.Dir), err)
 	}
-	return &app{sh: sh, st: st, cfg: cfg}, nil
+	a := &app{sh: sh, st: st, cfg: cfg}
+	if firstRun {
+		a.setup()
+	}
+	return a, nil
+}
+
+// predefined are the profiles setup creates, with their descriptions.
+var predefined = []struct{ name, desc string }{
+	{store.Default, `loaded in new terminals unless config.toml sets autoload`},
+	{store.Shared, `loaded before every other profile (skip with --no-shared)`},
+}
+
+func predefinedContent(sh shell.Shell, name, desc string) string {
+	return strings.Replace(sh.Template(name), "describe this profile here", desc, 1)
+}
+
+// setup runs on first use, when there is no config file yet: it creates the
+// predefined profiles, then the config file. Once the config file exists,
+// deleted predefined profiles stay deleted.
+func (a *app) setup() {
+	for _, p := range predefined {
+		// Create fails if the profile exists, e.g. because another terminal
+		// starting at the same time just created it.
+		if !a.st.Exists(p.name) {
+			if _, err := a.st.Create(p.name, predefinedContent(a.sh, p.name, p.desc)); err != nil && !a.st.Exists(p.name) {
+				warn("creating %s: %v", p.name, err)
+			}
+		}
+	}
+	if _, err := config.EnsureFile(a.st.Dir); err != nil {
+		warn("creating %s: %v", config.Path(a.st.Dir), err)
+	}
+}
+
+// untouched reports whether p is a predefined profile still as setup
+// created it.
+func (a *app) untouched(p store.Profile) bool {
+	for _, d := range predefined {
+		if d.name == p.Name {
+			b, err := os.ReadFile(p.Path)
+			return err == nil && string(b) == predefinedContent(a.sh, d.name, d.desc)
+		}
+	}
+	return false
 }
 
 // withApp adapts fn into a cobra RunE that builds the app first.

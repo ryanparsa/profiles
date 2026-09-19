@@ -12,7 +12,7 @@ import (
 )
 
 func installCmd() *cobra.Command {
-	var noCompletion, noAutoload bool
+	var noCompletion, noAutoload, noShared bool
 	cmd := &cobra.Command{
 		Use:   "install <shell>",
 		Short: "Print the shell integration for your rc file",
@@ -24,7 +24,11 @@ shell's rc file so "profiles load" can change the current terminal:
   pwsh  ($PROFILE)     Invoke-Expression (& profiles install pwsh | Out-String)
 
 In zsh, put the line after compinit (oh-my-zsh runs it for you) to get tab
-completion.`,
+completion.
+
+New terminals load the config's autoload profiles ("default" if unset) plus
+the "shared" profile. Use --no-shared to leave "shared" out, or --no-autoload
+to load nothing.`,
 		Args:      cobra.ExactArgs(1),
 		ValidArgs: shell.Names,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -49,12 +53,20 @@ completion.`,
 				}
 				completion = buf.String()
 			}
-			fmt.Fprint(cmd.OutOrStdout(), sh.Init(completion, !noAutoload))
+			autoload := "__autoload"
+			switch {
+			case noAutoload:
+				autoload = ""
+			case noShared:
+				autoload += " --no-shared"
+			}
+			fmt.Fprint(cmd.OutOrStdout(), sh.Init(completion, autoload))
 			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&noCompletion, "no-completion", false, "leave out tab completion")
-	cmd.Flags().BoolVar(&noAutoload, "no-autoload", false, "don't load the config's autoload profiles")
+	cmd.Flags().BoolVar(&noAutoload, "no-autoload", false, "don't load any profiles in new terminals")
+	cmd.Flags().BoolVar(&noShared, "no-shared", false, `don't load the "shared" profile in new terminals`)
 	return cmd
 }
 

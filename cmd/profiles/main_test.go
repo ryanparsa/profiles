@@ -179,6 +179,78 @@ func TestPosixShells(t *testing.T) {
 	}
 }
 
+// The first run creates config.toml, "default" and "shared". New terminals
+// load "default" (unless autoload is set) and "shared", and "shared" also
+// comes along with every load unless --no-shared is given.
+func TestPredefined(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows uses PowerShell")
+	}
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash not installed")
+	}
+	bash := func(dir, script string, extra ...string) string {
+		return run(t, env(dir, extra...), "bash", "--noprofile", "--norc", "-c", script)
+	}
+
+	dir := t.TempDir()
+	out := bash(dir, `eval "$(profiles install bash)"; profiles status`)
+	assertInOrder(t, out, "● shared", "● default")
+	for _, f := range []string{"config.toml", "default.sh", "shared.sh"} {
+		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
+			t.Errorf("first run didn't create %s: %v", f, err)
+		}
+	}
+	checkFirstLine(t, filepath.Join(dir, "default.sh"), "# default: loaded in new terminals unless config.toml sets autoload")
+
+	// After the first run, deleted predefined profiles stay deleted.
+	run(t, env(dir), "profiles", "rm", "-f", "default", "shared")
+	if out := bash(dir, `eval "$(profiles install bash)"`); strings.Contains(out, "profiles:") {
+		t.Errorf("new terminal without default.sh complained:\n%s", out)
+	}
+	for _, f := range []string{"default.sh", "shared.sh"} {
+		if _, err := os.Stat(filepath.Join(dir, f)); err == nil {
+			t.Errorf("%s was created again", f)
+		}
+	}
+
+	writeFiles(t, dir, map[string]string{
+		"shared.sh":  "export S=shared\nexport OVER=shared\n",
+		"default.sh": "export D=default\n",
+		"a.sh":       "export OVER=a\n",
+	})
+	show := `echo "S=${S-unset} D=${D-unset} OVER=${OVER-unset}"`
+
+	out = bash(dir, `eval "$(profiles install bash)"; `+show)
+	assertInOrder(t, out, "S=shared D=default OVER=shared")
+
+	// autoload set: "default" is not loaded, "shared" still is.
+	out = bash(dir, `eval "$(profiles install bash)"; `+show, "PROFILES_AUTOLOAD=a")
+	assertInOrder(t, out, "S=shared D=unset OVER=a")
+
+	out = bash(dir, `eval "$(profiles install bash --no-shared)"; `+show)
+	assertInOrder(t, out, "S=unset D=default OVER=unset")
+
+	// Loading a profile brings "shared" first; --no-shared leaves it out.
+	out = bash(dir, `eval "$(profiles install bash --no-autoload)"; profiles a; `+show+
+		`; profiles unload; profiles a --no-shared; `+show+`; profiles unload; profiles default; `+show)
+	assertInOrder(t, out,
+		"✓ loaded shared", "✓ loaded a", "S=shared D=unset OVER=a",
+		"S=unset D=unset OVER=a",
+		"S=shared D=default OVER=shared")
+}
+
+func checkFirstLine(t *testing.T, path, want string) {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _, _ := strings.Cut(string(b), "\n"); got != want {
+		t.Errorf("%s starts with %q, want %q", path, got, want)
+	}
+}
+
 const pwshA = `# profiles a
 $env:A_VAR = 'a'
 $env:PATH = '/opt/a/bin' + [IO.Path]::PathSeparator + $env:PATH
