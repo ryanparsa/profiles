@@ -1,0 +1,32 @@
+name: release
+
+# Push a version tag to publish a GitHub release with binaries for
+# macOS, Linux and Windows (amd64 + arm64):
+#   git tag v0.1.0 && git push origin v0.1.0
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # full history for the changelog
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Install zsh
+        run: sudo apt-get update && sudo apt-get install -y zsh
+      - run: go test ./...
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

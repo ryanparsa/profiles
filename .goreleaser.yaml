@@ -1,0 +1,47 @@
+# GoReleaser config: builds release binaries when a v* tag is pushed
+# (see .github/workflows/release.yml). Try it locally with:
+#   go run github.com/goreleaser/goreleaser/v2@latest release --snapshot --clean
+version: 2
+
+project_name: profiles
+
+builds:
+  - id: profiles
+    main: ./cmd/profiles
+    binary: profiles
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/ryanparsa/profiles/internal/cli.Version=v{{ .Version }}
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    # e.g. profiles_darwin_arm64.tar.gz. No version in the name, so
+    # releases/latest/download/profiles_<os>_<arch>.tar.gz always works.
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  github:
+    owner: ryanparsa
+    name: profiles
